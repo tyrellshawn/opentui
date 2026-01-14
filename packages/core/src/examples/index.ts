@@ -62,6 +62,7 @@ import * as extmarksDemo from "./extmarks-demo"
 import * as opacityExample from "./opacity-example"
 import * as scrollboxOverlayHitTest from "./scrollbox-overlay-hit-test"
 import * as scrollboxMouseTest from "./scrollbox-mouse-test"
+import * as pasteDemo from "./paste-demo"
 import { setupCommonDemoKeys } from "./lib/standalone-keys"
 
 interface Example {
@@ -312,6 +313,12 @@ const examples: Example[] = [
     description: "Interactive InputElement demo with validation and multiple fields",
     run: inputExample.run,
     destroy: inputExample.destroy,
+  },
+  {
+    name: "Paste Demo",
+    description: "Paste into inputs and inspect metadata including binary detection",
+    run: pasteDemo.run,
+    destroy: pasteDemo.destroy,
   },
   {
     name: "Terminal Palette Demo",
