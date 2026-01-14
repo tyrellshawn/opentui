@@ -1070,7 +1070,7 @@ export class CliRenderer extends EventEmitter implements RenderContext {
         }
       }
     })
-    this._stdinBuffer.on("paste", (data: string) => {
+    this._stdinBuffer.on("paste", (data) => {
       this._keyHandler.processPaste(data)
     })
   }

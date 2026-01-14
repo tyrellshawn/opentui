@@ -19,6 +19,8 @@ import { EventEmitter } from "events"
 const ESC = "\x1b"
 const BRACKETED_PASTE_START = "\x1b[200~"
 const BRACKETED_PASTE_END = "\x1b[201~"
+const BRACKETED_PASTE_START_BUFFER = Buffer.from(BRACKETED_PASTE_START)
+const BRACKETED_PASTE_END_BUFFER = Buffer.from(BRACKETED_PASTE_END)
 
 /**
  * Check if a string is a complete escape sequence or needs more data
@@ -228,9 +230,14 @@ export type StdinBufferOptions = {
   timeout?: number
 }
 
+export type PasteChunk = {
+  data: Buffer
+  text?: string
+}
+
 export type StdinBufferEventMap = {
   data: [string]
-  paste: [string]
+  paste: [PasteChunk]
 }
 
 /**
@@ -238,11 +245,11 @@ export type StdinBufferEventMap = {
  * Handles partial escape sequences that arrive across multiple chunks.
  */
 export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
-  private buffer: string = ""
+  private buffer: Buffer = Buffer.alloc(0)
   private timeout: Timer | null = null
   private readonly timeoutMs: number
   private pasteMode: boolean = false
-  private pasteBuffer: string = ""
+  private pasteBuffer: Buffer = Buffer.alloc(0)
 
   constructor(options: StdinBufferOptions = {}) {
     super()
@@ -250,89 +257,46 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
   }
 
   public process(data: string | Buffer): void {
-    // Clear any pending timeout
     if (this.timeout) {
       clearTimeout(this.timeout)
       this.timeout = null
     }
 
-    // Handle high-byte conversion (for compatibility with parseKeypress)
-    // If buffer has single byte > 127, convert to ESC + (byte - 128)
-    // TODO: This seems redundant as parseKeypress should handle this.
-    let str: string
-    if (Buffer.isBuffer(data)) {
-      if (data.length === 1 && data[0]! > 127) {
-        const byte = data[0]! - 128
-        str = "\x1b" + String.fromCharCode(byte)
-      } else {
-        str = data.toString()
-      }
-    } else {
-      str = data
-    }
+    const chunk = this.normalizeChunk(data)
 
-    if (str.length === 0 && this.buffer.length === 0) {
+    if (chunk.length === 0 && this.buffer.length === 0) {
       this.emit("data", "")
       return
     }
 
-    this.buffer += str
-
     if (this.pasteMode) {
-      this.pasteBuffer += this.buffer
-      this.buffer = ""
-
-      const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END)
-      if (endIndex !== -1) {
-        const pastedContent = this.pasteBuffer.slice(0, endIndex)
-        const remaining = this.pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length)
-
-        this.pasteMode = false
-        this.pasteBuffer = ""
-
-        this.emit("paste", pastedContent)
-
-        if (remaining.length > 0) {
-          this.process(remaining)
-        }
-      }
+      this.appendToPaste(chunk)
       return
     }
 
-    const startIndex = this.buffer.indexOf(BRACKETED_PASTE_START)
+    this.buffer = Buffer.concat([this.buffer, chunk])
+
+    const startIndex = this.buffer.indexOf(BRACKETED_PASTE_START_BUFFER)
     if (startIndex !== -1) {
       if (startIndex > 0) {
-        const beforePaste = this.buffer.slice(0, startIndex)
-        const result = extractCompleteSequences(beforePaste)
+        const beforePaste = this.buffer.subarray(0, startIndex)
+        const result = extractCompleteSequences(beforePaste.toString())
         for (const sequence of result.sequences) {
           this.emit("data", sequence)
         }
       }
 
-      this.buffer = this.buffer.slice(startIndex + BRACKETED_PASTE_START.length)
+      const afterStart = this.buffer.subarray(startIndex + BRACKETED_PASTE_START_BUFFER.length)
       this.pasteMode = true
-      this.pasteBuffer = this.buffer
-      this.buffer = ""
+      this.pasteBuffer = afterStart
+      this.buffer = Buffer.alloc(0)
 
-      const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END)
-      if (endIndex !== -1) {
-        const pastedContent = this.pasteBuffer.slice(0, endIndex)
-        const remaining = this.pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length)
-
-        this.pasteMode = false
-        this.pasteBuffer = ""
-
-        this.emit("paste", pastedContent)
-
-        if (remaining.length > 0) {
-          this.process(remaining)
-        }
-      }
+      this.tryEmitPaste()
       return
     }
 
-    const result = extractCompleteSequences(this.buffer)
-    this.buffer = result.remainder
+    const result = extractCompleteSequences(this.buffer.toString())
+    this.buffer = Buffer.from(result.remainder)
 
     for (const sequence of result.sequences) {
       this.emit("data", sequence)
@@ -359,8 +323,8 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
       return []
     }
 
-    const sequences = [this.buffer]
-    this.buffer = ""
+    const sequences = [this.buffer.toString()]
+    this.buffer = Buffer.alloc(0)
     return sequences
   }
 
@@ -369,16 +333,56 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
       clearTimeout(this.timeout)
       this.timeout = null
     }
-    this.buffer = ""
+    this.buffer = Buffer.alloc(0)
     this.pasteMode = false
-    this.pasteBuffer = ""
+    this.pasteBuffer = Buffer.alloc(0)
   }
 
   getBuffer(): string {
-    return this.buffer
+    return this.buffer.toString()
   }
 
   destroy(): void {
     this.clear()
+  }
+
+  private normalizeChunk(data: string | Buffer): Buffer {
+    if (this.pasteMode) {
+      return Buffer.isBuffer(data) ? data : Buffer.from(data)
+    }
+
+    if (Buffer.isBuffer(data)) {
+      if (data.length === 1 && data[0]! > 127) {
+        const byte = data[0]! - 128
+        return Buffer.from("\x1b" + String.fromCharCode(byte))
+      }
+      return data
+    }
+
+    return Buffer.from(data)
+  }
+
+  private appendToPaste(chunk: Buffer): void {
+    this.pasteBuffer = Buffer.concat([this.pasteBuffer, chunk])
+    this.tryEmitPaste()
+  }
+
+  private tryEmitPaste(): void {
+    const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END_BUFFER)
+    if (endIndex === -1) {
+      return
+    }
+
+    const pastedContent = this.pasteBuffer.subarray(0, endIndex)
+    const remaining = this.pasteBuffer.subarray(endIndex + BRACKETED_PASTE_END_BUFFER.length)
+
+    this.pasteMode = false
+    this.pasteBuffer = Buffer.alloc(0)
+
+    this.emit("paste", { data: pastedContent, text: pastedContent.toString() })
+
+    if (remaining.length > 0) {
+      this.process(remaining)
+    }
   }
 }

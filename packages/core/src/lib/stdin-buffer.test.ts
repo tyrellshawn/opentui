@@ -305,7 +305,8 @@ describe("StdinBuffer", () => {
       // Collect paste events
       emittedPaste = []
       buffer.on("paste", (data) => {
-        emittedPaste.push(data)
+        const text = typeof data === "string" ? data : (data.text ?? "")
+        emittedPaste.push(text)
       })
     })
 

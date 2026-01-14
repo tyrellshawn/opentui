@@ -81,6 +81,24 @@ test("KeyHandler - processPaste handles content directly", () => {
   expect(receivedPaste).toBe("chunk1chunk2chunk3")
 })
 
+test("KeyHandler - detects magic bytes for binary paste", () => {
+  const handler = createKeyHandler()
+
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])
+
+  let receivedPaste: any
+  handler.on("paste", (event) => {
+    receivedPaste = event
+  })
+
+  ;(handler as any).processPaste(pngBytes)
+
+  expect(Buffer.isBuffer(receivedPaste?.data)).toBe(true)
+  expect(receivedPaste?.data?.equals?.(pngBytes)).toBe(true)
+  expect(receivedPaste?.fileType).toBe("image/png")
+  expect(receivedPaste?.text).toBeUndefined()
+})
+
 test("KeyHandler - strips ANSI codes in paste", () => {
   const handler = createKeyHandler()
 

@@ -1,6 +1,7 @@
 import { EventEmitter } from "events"
 import { parseKeypress, type KeyEventType, type ParsedKey } from "./parse.keypress"
-import { ANSI } from "../ansi"
+import type { PasteChunk } from "./stdin-buffer"
+import { detectPasteFileType } from "./paste-detect"
 
 export class KeyEvent implements ParsedKey {
   name: string
@@ -61,13 +62,23 @@ export class KeyEvent implements ParsedKey {
   }
 }
 
+export type PasteEventInit = {
+  data: Buffer
+  text?: string
+  fileType?: string
+}
+
 export class PasteEvent {
-  text: string
+  data: Buffer
+  text?: string
+  fileType?: string
   private _defaultPrevented: boolean = false
   private _propagationStopped: boolean = false
 
-  constructor(text: string) {
-    this.text = text
+  constructor(init: PasteEventInit) {
+    this.data = init.data
+    this.text = init.text
+    this.fileType = init.fileType
   }
 
   get defaultPrevented(): boolean {
@@ -128,13 +139,47 @@ export class KeyHandler extends EventEmitter<KeyHandlerEventMap> {
     return true
   }
 
-  public processPaste(data: string): void {
+  public processPaste(data: string | Buffer | PasteChunk): void {
     try {
-      const cleanedData = Bun.stripANSI(data)
-      this.emit("paste", new PasteEvent(cleanedData))
+      const { buffer, text } = this.normalizePasteInput(data)
+      const fileType = detectPasteFileType(buffer)
+      const cleanedText = fileType
+        ? undefined
+        : text !== undefined
+          ? Bun.stripANSI(text)
+          : this.getCleanedText(buffer, fileType)
+
+      this.emit(
+        "paste",
+        new PasteEvent({
+          data: buffer,
+          text: cleanedText,
+          fileType,
+        }),
+      )
     } catch (error) {
       console.error(`[KeyHandler] Error processing paste:`, error)
     }
+  }
+
+  private normalizePasteInput(data: string | Buffer | PasteChunk): { buffer: Buffer; text?: string } {
+    if (typeof data === "string") {
+      return { buffer: Buffer.from(data), text: data }
+    }
+
+    if (Buffer.isBuffer(data)) {
+      return { buffer: data }
+    }
+
+    return { buffer: data.data, text: data.text }
+  }
+
+  private getCleanedText(buffer: Buffer, fileType?: string): string | undefined {
+    if (fileType) {
+      return undefined
+    }
+
+    return Bun.stripANSI(buffer.toString())
   }
 }
 
