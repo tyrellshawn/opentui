@@ -249,7 +249,13 @@ export class TextareaRenderable extends EditBufferRenderable {
   }
 
   public handlePaste(event: PasteEvent): void {
-    this.insertText(event.text)
+    const pasteText = event.text ?? (typeof event.data === "string" ? event.data : event.data?.toString("utf8")) ?? null
+
+    if (pasteText === null) {
+      return
+    }
+
+    this.insertText(pasteText)
   }
 
   public handleKeyPress(key: KeyEvent): boolean {
@@ -277,8 +283,9 @@ export class TextareaRenderable extends EditBufferRenderable {
         return true
       }
 
-      if (key.sequence) {
-        const firstCharCode = key.sequence.charCodeAt(0)
+      const sequence = key.sequence
+      if (typeof sequence === "string" && sequence.length > 0) {
+        const firstCharCode = sequence.charCodeAt(0)
 
         if (firstCharCode < 32) {
           return false
@@ -288,7 +295,7 @@ export class TextareaRenderable extends EditBufferRenderable {
           return false
         }
 
-        this.insertText(key.sequence)
+        this.insertText(sequence)
         return true
       }
     }
