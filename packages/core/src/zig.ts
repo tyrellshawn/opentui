@@ -66,6 +66,12 @@ registerEnvVar({
   type: "boolean",
   default: false,
 })
+registerEnvVar({
+  name: "OPENTUI_FORCE_NOZWJ",
+  description: "Use no_zwj width method (Unicode without ZWJ joining)",
+  type: "boolean",
+  default: false,
+})
 
 // Global singleton state for FFI tracing to prevent duplicate exit handlers
 let globalTraceSymbols: Record<string, number[]> | null = null
@@ -613,6 +619,10 @@ function getOpenTUILib(libPath?: string) {
     },
     textBufferViewSetTabIndicatorColor: {
       args: ["ptr", "ptr"],
+      returns: "void",
+    },
+    textBufferViewSetTruncate: {
+      args: ["ptr", "bool"],
       returns: "void",
     },
     textBufferViewMeasureForDimensions: {
@@ -1462,6 +1472,7 @@ export interface RenderLib {
   textBufferViewGetPlainTextBytes: (view: Pointer, maxLength: number) => Uint8Array | null
   textBufferViewSetTabIndicator: (view: Pointer, indicator: number) => void
   textBufferViewSetTabIndicatorColor: (view: Pointer, color: RGBA) => void
+  textBufferViewSetTruncate: (view: Pointer, truncate: boolean) => void
   textBufferViewMeasureForDimensions: (
     view: Pointer,
     width: number,
@@ -2633,6 +2644,10 @@ class FFIRenderLib implements RenderLib {
     this.opentui.symbols.textBufferViewSetTabIndicatorColor(view, color.buffer)
   }
 
+  public textBufferViewSetTruncate(view: Pointer, truncate: boolean): void {
+    this.opentui.symbols.textBufferViewSetTruncate(view, truncate)
+  }
+
   public textBufferViewMeasureForDimensions(
     view: Pointer,
     width: number,
@@ -3245,6 +3260,7 @@ class FFIRenderLib implements RenderLib {
       sync: caps.sync,
       bracketed_paste: caps.bracketed_paste,
       hyperlinks: caps.hyperlinks,
+      explicit_cursor_positioning: caps.explicit_cursor_positioning,
       terminal: {
         name: caps.term_name ?? "",
         version: caps.term_version ?? "",
