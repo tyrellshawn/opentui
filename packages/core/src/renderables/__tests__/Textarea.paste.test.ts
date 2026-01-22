@@ -223,7 +223,7 @@ describe("Textarea - Paste Tests", () => {
       editor.focus()
       editor.gotoLine(9999)
 
-      editor.handlePaste(new PasteEvent(" Content"))
+      editor.handlePaste(new PasteEvent({ data: Buffer.from(" Content"), text: " Content" }))
 
       expect(editor.plainText).toBe("Test Content")
     })
@@ -248,7 +248,7 @@ describe("Textarea - Paste Tests", () => {
       expect(editor.getSelectedText()).toBe("World")
 
       // Use handlePaste directly
-      editor.handlePaste(new PasteEvent("Universe"))
+      editor.handlePaste(new PasteEvent({ data: Buffer.from("Universe"), text: "Universe" }))
 
       expect(editor.hasSelection()).toBe(false)
       expect(editor.plainText).toBe("Hello Universe")

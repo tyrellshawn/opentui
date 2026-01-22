@@ -29,14 +29,14 @@ function formatHexHead(buffer: Buffer): string {
   return hex.match(/.{1,2}/g)?.join(" ") ?? hex
 }
 
-function formatTextPreview(text?: string): string {
-  if (!text) return "<binary>"
+function formatTextPreview(buffer: Buffer): string {
+  const text = buffer.toString("utf8")
   const normalized = text.replace(/\r/g, "").replace(/\n/g, " ⏎ ")
   return normalized.length > 80 ? `${normalized.slice(0, 80)}…` : normalized
 }
 
 function updateLog(event: PasteEvent): void {
-  const entry = `type=${event.fileType ?? "text"} len=${event.data.length} head=${formatHexHead(event.data)} preview=${formatTextPreview(event.text)}`
+  const entry = `len=${event.data.length} head=${formatHexHead(event.data)} preview=${formatTextPreview(event.data)}`
 
   logEntries.unshift(entry)
   logEntries.splice(12)
@@ -45,14 +45,13 @@ function updateLog(event: PasteEvent): void {
     logDisplay.content = t`${logEntries.join("\n")}`
   }
 
-  if (!event.fileType && event.text) {
-    if (singleLineInput) {
-      singleLineInput.value = event.text
-    }
+  const text = event.text ?? event.data.toString("utf8")
+  if (singleLineInput) {
+    singleLineInput.value = text
+  }
 
-    if (multilineInput) {
-      multilineInput.value = event.text
-    }
+  if (multilineInput) {
+    multilineInput.value = text
   }
 }
 

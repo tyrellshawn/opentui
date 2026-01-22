@@ -1,7 +1,6 @@
 import { EventEmitter } from "events"
 import { parseKeypress, type KeyEventType, type ParsedKey } from "./parse.keypress"
 import type { PasteChunk } from "./stdin-buffer"
-import { detectPasteFileType } from "./paste-detect"
 
 export class KeyEvent implements ParsedKey {
   name: string
@@ -65,20 +64,17 @@ export class KeyEvent implements ParsedKey {
 export type PasteEventInit = {
   data: Buffer
   text?: string
-  fileType?: string
 }
 
 export class PasteEvent {
   data: Buffer
   text?: string
-  fileType?: string
   private _defaultPrevented: boolean = false
   private _propagationStopped: boolean = false
 
   constructor(init: PasteEventInit) {
     this.data = init.data
     this.text = init.text
-    this.fileType = init.fileType
   }
 
   get defaultPrevented(): boolean {
@@ -142,19 +138,13 @@ export class KeyHandler extends EventEmitter<KeyHandlerEventMap> {
   public processPaste(data: string | Buffer | PasteChunk): void {
     try {
       const { buffer, text } = this.normalizePasteInput(data)
-      const fileType = detectPasteFileType(buffer)
-      const cleanedText = fileType
-        ? undefined
-        : text !== undefined
-          ? Bun.stripANSI(text)
-          : this.getCleanedText(buffer, fileType)
+      const cleanedText = text !== undefined ? Bun.stripANSI(text) : this.getCleanedText(buffer)
 
       this.emit(
         "paste",
         new PasteEvent({
           data: buffer,
           text: cleanedText,
-          fileType,
         }),
       )
     } catch (error) {
@@ -174,11 +164,7 @@ export class KeyHandler extends EventEmitter<KeyHandlerEventMap> {
     return { buffer: data.data, text: data.text }
   }
 
-  private getCleanedText(buffer: Buffer, fileType?: string): string | undefined {
-    if (fileType) {
-      return undefined
-    }
-
+  private getCleanedText(buffer: Buffer): string {
     return Bun.stripANSI(buffer.toString())
   }
 }

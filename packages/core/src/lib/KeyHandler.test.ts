@@ -90,13 +90,10 @@ test("KeyHandler - detects magic bytes for binary paste", () => {
   handler.on("paste", (event) => {
     receivedPaste = event
   })
-
   ;(handler as any).processPaste(pngBytes)
 
   expect(Buffer.isBuffer(receivedPaste?.data)).toBe(true)
   expect(receivedPaste?.data?.equals?.(pngBytes)).toBe(true)
-  expect(receivedPaste?.fileType).toBe("image/png")
-  expect(receivedPaste?.text).toBeUndefined()
 })
 
 test("KeyHandler - strips ANSI codes in paste", () => {
